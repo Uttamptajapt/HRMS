@@ -1,4 +1,5 @@
-﻿using HRMS.Application.DTOs.HR;
+﻿using HRMS.Application.DTOs.Auth;
+using HRMS.Application.DTOs.HR;
 using HRMS.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -42,15 +43,24 @@ namespace HRMS.API.Controllers
         }
 
         // CREATE HR
-        [HttpPost("create")]
-        public async Task<IActionResult> CreateHR(CreateHRDto dto)
+        // 🔹 ADMIN ONLY → CREATE HR
+        [Authorize(Roles = "Admin")]
+        [HttpPost("create-hr")]
+        public async Task<IActionResult> CreateHr(RegisterRequestDto dto)
         {
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
-            if (existingUser != null) return BadRequest("User already exists");
+            if (existingUser != null)
+                return BadRequest("User already exists");
 
-            var hrUser = new ApplicationUser { UserName = dto.Email, Email = dto.Email };
+            var hrUser = new ApplicationUser
+            {
+                UserName = dto.Email,
+                Email = dto.Email
+            };
+
             var result = await _userManager.CreateAsync(hrUser, dto.Password);
-            if (!result.Succeeded) return BadRequest(result.Errors);
+            if (!result.Succeeded)
+                return BadRequest(result.Errors);
 
             await _userManager.AddToRoleAsync(hrUser, "HR");
             return Ok("HR created successfully");

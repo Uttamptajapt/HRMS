@@ -1,9 +1,10 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using System;
 
 namespace HRMS.Infrastructure.Identity
 {
     public class ApplicationUser : IdentityUser
     {
-        // Additional fields can be added later, e.g., FullName
+        public Guid OrganizationId { get; set; }
     }
 }

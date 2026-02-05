@@ -1,4 +1,5 @@
-﻿using HRMS.Application.DTOs.Employee;
+﻿using HRMS.Domain.Entities;
+using HRMS.Infrastructure.Data;
 using HRMS.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -13,18 +14,35 @@ namespace HRMS.API.Controllers
     [Authorize(Roles = "HR,Admin")]
     public class EmployeeController : ControllerBase
     {
-        private static List<Employee> _employees = new List<Employee>();
+        private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
 
-        public EmployeeController(UserManager<ApplicationUser> userManager) => _userManager = userManager;
+        public EmployeeController(
+            ApplicationDbContext context,
+            UserManager<ApplicationUser> userManager)
+        {
+            _context = context;
+            _userManager = userManager;
+        }
 
         // CREATE Employee (HR only)
         [HttpPost("create")]
         [Authorize(Roles = "HR")]
-        public IActionResult Create(CreateEmployeeDto dto)
+        public async Task<IActionResult> Create(CreateEmployeeDto dto)
         {
-            var hrUserId = User.Claims.First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub).Value;
+            // Get logged-in HR user
+            var hrUserId = User.Claims
+                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
+                .Value;
 
+            // Validate Organization exists
+            var organizationExists = _context.Organizations
+                .Any(o => o.Id == dto.OrganizationId);
+
+            if (!organizationExists)
+                return BadRequest("Invalid OrganizationId. Organization does not exist.");
+
+            // Create Employee entity
             var employee = new Employee
             {
                 Id = Guid.NewGuid(),
@@ -33,10 +51,13 @@ namespace HRMS.API.Controllers
                 Email = dto.Email,
                 PhoneNumber = dto.PhoneNumber,
                 Address = dto.Address,
+                OrganizationId = dto.OrganizationId,  // 🔥 REQUIRED
                 CreatedByUserId = hrUserId
             };
 
-            _employees.Add(employee);
+            _context.Employees.Add(employee);
+            await _context.SaveChangesAsync(); // 🔥 MUST
+
             return Ok(new { message = "Employee created successfully", employee });
         }
 
@@ -44,26 +65,43 @@ namespace HRMS.API.Controllers
         [HttpGet("all")]
         public IActionResult GetAll()
         {
-            var userId = User.Claims.First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub).Value;
-            var roles = User.Claims.Where(c => c.Type == ClaimTypes.Role).Select(r => r.Value).ToList();
+            var userId = User.Claims
+                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
+                .Value;
 
-            var result = roles.Contains("Admin") ? _employees : _employees.Where(e => e.CreatedByUserId == userId).ToList();
+            var roles = User.Claims
+                .Where(c => c.Type == ClaimTypes.Role)
+                .Select(r => r.Value)
+                .ToList();
+
+            var result = roles.Contains("Admin")
+                ? _context.Employees.ToList()
+                : _context.Employees.Where(e => e.CreatedByUserId == userId).ToList();
+
             return Ok(result);
         }
 
         // UPDATE Employee
         [HttpPut("update/{id}")]
         [Authorize(Roles = "HR")]
-        public IActionResult Update(Guid id, UpdateEmployeeDto dto)
+        public async Task<IActionResult> Update(Guid id, UpdateEmployeeDto dto)
         {
-            var userId = User.Claims.First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub).Value;
-            var employee = _employees.FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
-            if (employee == null) return NotFound("Employee not found or not owned by you");
+            var userId = User.Claims
+                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
+                .Value;
+
+            var employee = _context.Employees
+                .FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
+
+            if (employee == null)
+                return NotFound("Employee not found or not owned by you");
 
             employee.FirstName = dto.FirstName;
             employee.LastName = dto.LastName;
             employee.PhoneNumber = dto.PhoneNumber;
             employee.Address = dto.Address;
+
+            await _context.SaveChangesAsync(); // 🔥 SAVE DB changes
 
             return Ok(new { message = "Employee updated successfully", employee });
         }
@@ -71,26 +109,22 @@ namespace HRMS.API.Controllers
         // DELETE Employee
         [HttpDelete("delete/{id}")]
         [Authorize(Roles = "HR")]
-        public IActionResult Delete(Guid id)
+        public async Task<IActionResult> Delete(Guid id)
         {
-            var userId = User.Claims.First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub).Value;
-            var employee = _employees.FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
-            if (employee == null) return NotFound("Employee not found or not owned by you");
+            var userId = User.Claims
+                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
+                .Value;
 
-            _employees.Remove(employee);
+            var employee = _context.Employees
+                .FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
+
+            if (employee == null)
+                return NotFound("Employee not found or not owned by you");
+
+            _context.Employees.Remove(employee);
+            await _context.SaveChangesAsync();
+
             return Ok("Employee deleted successfully");
-        }
-
-        // Employee entity
-        public class Employee
-        {
-            public Guid Id { get; set; }
-            public string FirstName { get; set; }
-            public string LastName { get; set; }
-            public string Email { get; set; }
-            public string PhoneNumber { get; set; }
-            public string Address { get; set; }
-            public string CreatedByUserId { get; set; } // HR who created
         }
     }
 }

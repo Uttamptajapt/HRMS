@@ -21,4 +21,8 @@
     <ProjectReference Include="..\HRMS1.Domain\HRMS1.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Data\Enitites\" />
+  </ItemGroup>
+
 </Project>
