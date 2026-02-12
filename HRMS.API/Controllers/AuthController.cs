@@ -115,6 +115,7 @@ namespace HRMS.API.Controllers
             if (user == null)
                 return Unauthorized();
 
+
             var newAccessToken = await GenerateJwtToken(user);
 
             return Ok(new { token = newAccessToken });
@@ -148,6 +149,7 @@ namespace HRMS.API.Controllers
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                
             };
 
             foreach (var role in roles)

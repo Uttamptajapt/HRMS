@@ -9,17 +9,18 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add DbContext
+// ---------------- DATABASE ----------------
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Add Identity
+// ---------------- IDENTITY ----------------
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
-// JWT Authentication
+// ---------------- JWT AUTH ----------------
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -42,15 +43,15 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
+// ---------------- CONTROLLERS ----------------
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// ? Add Swagger with JWT support
+// ---------------- SWAGGER + JWT SUPPORT ----------------
 builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "HRMS API", Version = "v1" });
 
-    // Define the security scheme
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -61,7 +62,6 @@ builder.Services.AddSwaggerGen(c =>
         Description = "Enter 'Bearer' followed by your JWT token."
     });
 
-    // Require Bearer token globally
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -80,15 +80,41 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Middleware
+
+// ---------------- ROLE SEEDING ----------------
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    await SeedRolesAsync(services);
+}
+
+
+// ---------------- MIDDLEWARE ----------------
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
-app.UseAuthentication(); // ? before UseAuthorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
 app.Run();
+
+
+// ---------------- ROLE SEED METHOD ----------------
+static async Task SeedRolesAsync(IServiceProvider serviceProvider)
+{
+    var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
+    string[] roles = { "Admin", "HR", "Employee" };
+
+    foreach (var role in roles)
+    {
+        if (!await roleManager.RoleExistsAsync(role))
+        {
+            await roleManager.CreateAsync(new IdentityRole(role));
+        }
+    }
+}

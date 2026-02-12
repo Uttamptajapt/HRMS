@@ -10,9 +10,8 @@ namespace HRMS.Domain.Entities
         public string Name { get; set; }
 
         public string Address { get; set; }
-
         public string CreatedByUserId { get; set; }
 
-        
+
     }
 }

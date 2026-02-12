@@ -9,7 +9,7 @@ namespace HRMS.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")] // 🔐 Admin only
+    [Authorize(Roles = "Admin")]
     public class HRController : ControllerBase
     {
         private readonly UserManager<ApplicationUser> _userManager;
@@ -19,7 +19,7 @@ namespace HRMS.API.Controllers
             _userManager = userManager;
         }
 
-        // GET all HR users
+        // ✅ GET ALL HR USERS
         [HttpGet("all")]
         public async Task<IActionResult> GetAllHR()
         {
@@ -42,10 +42,8 @@ namespace HRMS.API.Controllers
             return Ok(hrUsers);
         }
 
-        // CREATE HR
-        // 🔹 ADMIN ONLY → CREATE HR
-        [Authorize(Roles = "Admin")]
-        [HttpPost("create-hr")]
+        // ✅ CREATE HR
+        [HttpPost("create")]
         public async Task<IActionResult> CreateHr(RegisterRequestDto dto)
         {
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
@@ -63,21 +61,68 @@ namespace HRMS.API.Controllers
                 return BadRequest(result.Errors);
 
             await _userManager.AddToRoleAsync(hrUser, "HR");
-            return Ok("HR created successfully");
+
+            return Ok(new
+            {
+                message = "HR created successfully",
+                hrUser.Id,
+                hrUser.Email
+            });
         }
 
-        // DELETE HR
-        [HttpDelete("delete/{hrId}")]
+        // ✅ UPDATE HR
+        [HttpPut("update/{Id}")]
+        public async Task<IActionResult> UpdateHR(string hrId, UpdateHrDto dto)
+        {
+            var hrUser = await _userManager.FindByIdAsync(hrId);
+            if (hrUser == null)
+                return NotFound("HR user not found");
+
+            var isHR = await _userManager.IsInRoleAsync(hrUser, "HR");
+            if (!isHR)
+                return BadRequest("User is not an HR");
+
+            // Update Email & Username
+            hrUser.Email = dto.Email;
+            hrUser.UserName = dto.Email;
+
+            var updateResult = await _userManager.UpdateAsync(hrUser);
+            if (!updateResult.Succeeded)
+                return BadRequest(updateResult.Errors);
+
+            // Update Password (if provided)
+            if (!string.IsNullOrEmpty(dto.NewPassword))
+            {
+                var token = await _userManager.GeneratePasswordResetTokenAsync(hrUser);
+                var passwordResult = await _userManager.ResetPasswordAsync(hrUser, token, dto.NewPassword);
+
+                if (!passwordResult.Succeeded)
+                    return BadRequest(passwordResult.Errors);
+            }
+
+            return Ok(new
+            {
+                message = "HR updated successfully",
+                hrUser.Id,
+                hrUser.Email
+            });
+        }
+
+        // ✅ DELETE HR
+        [HttpDelete("delete/{hId}")]
         public async Task<IActionResult> DeleteHR(string hrId)
         {
             var hrUser = await _userManager.FindByIdAsync(hrId);
-            if (hrUser == null) return NotFound("HR user not found");
+            if (hrUser == null)
+                return NotFound("HR user not found");
 
             var isHR = await _userManager.IsInRoleAsync(hrUser, "HR");
-            if (!isHR) return BadRequest("User is not an HR");
+            if (!isHR)
+                return BadRequest("User is not an HR");
 
             var result = await _userManager.DeleteAsync(hrUser);
-            if (!result.Succeeded) return BadRequest(result.Errors);
+            if (!result.Succeeded)
+                return BadRequest(result.Errors);
 
             return Ok("HR deleted successfully");
         }

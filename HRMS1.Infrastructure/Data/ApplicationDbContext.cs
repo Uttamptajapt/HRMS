@@ -18,5 +18,6 @@ namespace HRMS.Infrastructure.Data
 
         public DbSet<RefreshToken> RefreshTokens { get; set; }
 
+
     }
 }

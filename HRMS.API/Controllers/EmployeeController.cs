@@ -24,7 +24,25 @@ namespace HRMS.API.Controllers
             _context = context;
             _userManager = userManager;
         }
+        // GET Employees
+        [HttpGet("all")]
+        public IActionResult GetAll()
+        {
+            var userId = User.Claims
+                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
+                .Value;
 
+            var roles = User.Claims
+                .Where(c => c.Type == ClaimTypes.Role)
+                .Select(r => r.Value)
+                .ToList();
+                     
+            var result = roles.Contains("Admin")
+                ? _context.Employees.ToList()
+                : _context.Employees.Where(e => e.CreatedByUserId == userId).ToList();
+
+            return Ok(result);
+        }
         // CREATE Employee (HR only)
         [HttpPost("create")]
         [Authorize(Roles = "HR")]
@@ -59,26 +77,6 @@ namespace HRMS.API.Controllers
             await _context.SaveChangesAsync(); // 🔥 MUST
 
             return Ok(new { message = "Employee created successfully", employee });
-        }
-
-        // GET Employees
-        [HttpGet("all")]
-        public IActionResult GetAll()
-        {
-            var userId = User.Claims
-                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
-                .Value;
-
-            var roles = User.Claims
-                .Where(c => c.Type == ClaimTypes.Role)
-                .Select(r => r.Value)
-                .ToList();
-
-            var result = roles.Contains("Admin")
-                ? _context.Employees.ToList()
-                : _context.Employees.Where(e => e.CreatedByUserId == userId).ToList();
-
-            return Ok(result);
         }
 
         // UPDATE Employee
@@ -128,3 +126,4 @@ namespace HRMS.API.Controllers
         }
     }
 }
+      
