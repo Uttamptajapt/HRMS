@@ -1,6 +1,7 @@
 ﻿using HRMS.Domain.Entities;
 using HRMS.Infrastructure.Data;
 using HRMS.Infrastructure.Identity;
+using HRMS.Application.Common.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +25,8 @@ namespace HRMS.API.Controllers
             _context = context;
             _userManager = userManager;
         }
-        // GET Employees
+
+        // ✅ GET Employees
         [HttpGet("all")]
         public IActionResult GetAll()
         {
@@ -36,31 +38,40 @@ namespace HRMS.API.Controllers
                 .Where(c => c.Type == ClaimTypes.Role)
                 .Select(r => r.Value)
                 .ToList();
-                     
+
             var result = roles.Contains("Admin")
                 ? _context.Employees.ToList()
                 : _context.Employees.Where(e => e.CreatedByUserId == userId).ToList();
 
-            return Ok(result);
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Employees fetched successfully",
+                Data = result
+            });
         }
-        // CREATE Employee (HR only)
+
+        // ✅ CREATE Employee (HR only)
         [HttpPost("create")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> Create(CreateEmployeeDto dto)
         {
-            // Get logged-in HR user
             var hrUserId = User.Claims
                 .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
                 .Value;
 
-            // Validate Organization exists
             var organizationExists = _context.Organizations
                 .Any(o => o.Id == dto.OrganizationId);
 
             if (!organizationExists)
-                return BadRequest("Invalid OrganizationId. Organization does not exist.");
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Invalid OrganizationId. Organization does not exist."
+                });
+            }
 
-            // Create Employee entity
             var employee = new Employee
             {
                 Id = Guid.NewGuid(),
@@ -69,17 +80,22 @@ namespace HRMS.API.Controllers
                 Email = dto.Email,
                 PhoneNumber = dto.PhoneNumber,
                 Address = dto.Address,
-                OrganizationId = dto.OrganizationId,  // 🔥 REQUIRED
+                OrganizationId = dto.OrganizationId,
                 CreatedByUserId = hrUserId
             };
 
             _context.Employees.Add(employee);
-            await _context.SaveChangesAsync(); // 🔥 MUST
+            await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Employee created successfully", employee });
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Employee created successfully",
+                Data = employee
+            });
         }
 
-        // UPDATE Employee
+        // ✅ UPDATE Employee
         [HttpPut("update/{id}")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> Update(Guid id, UpdateEmployeeDto dto)
@@ -92,19 +108,30 @@ namespace HRMS.API.Controllers
                 .FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
 
             if (employee == null)
-                return NotFound("Employee not found or not owned by you");
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Employee not found or not owned by you"
+                });
+            }
 
             employee.FirstName = dto.FirstName;
             employee.LastName = dto.LastName;
             employee.PhoneNumber = dto.PhoneNumber;
             employee.Address = dto.Address;
 
-            await _context.SaveChangesAsync(); // 🔥 SAVE DB changes
+            await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Employee updated successfully", employee });
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Employee updated successfully",
+                Data = employee
+            });
         }
 
-        // DELETE Employee
+        // ✅ DELETE Employee
         [HttpDelete("delete/{id}")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> Delete(Guid id)
@@ -117,13 +144,22 @@ namespace HRMS.API.Controllers
                 .FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
 
             if (employee == null)
-                return NotFound("Employee not found or not owned by you");
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Employee not found or not owned by you"
+                });
+            }
 
             _context.Employees.Remove(employee);
             await _context.SaveChangesAsync();
 
-            return Ok("Employee deleted successfully");
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Employee deleted successfully"
+            });
         }
     }
 }
-      

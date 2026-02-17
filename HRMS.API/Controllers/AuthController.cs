@@ -1,4 +1,5 @@
 ﻿using HRMS.Application.DTOs.Auth;
+using HRMS.Application.Common.Responses;
 using HRMS.Infrastructure.Identity;
 using HRMS.Infrastructure.Data;
 using HRMS.Domain.Entities;
@@ -35,7 +36,7 @@ namespace HRMS.API.Controllers
             _db = db;
         }
 
-        // 🔹 REGISTER (UNCHANGED)
+        // 🔹 REGISTER
         [HttpPost("register")]
         public async Task<IActionResult> Register(RegisterRequestDto dto)
         {
@@ -46,26 +47,53 @@ namespace HRMS.API.Controllers
             };
 
             var result = await _userManager.CreateAsync(user, dto.Password);
-            if (!result.Succeeded)
-                return BadRequest(result.Errors);
 
-            return Ok("User registered successfully");
+            if (!result.Succeeded)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Registration failed",
+                    Errors = result.Errors.Select(e => e.Description).ToList()
+                });
+            }
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "User registered successfully"
+            });
         }
 
-        // 🔐 LOGIN (ENHANCED, NOT REPLACED)
+        // 🔐 LOGIN
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginRequestDto dto)
         {
             var user = await _userManager.FindByEmailAsync(dto.Email);
+
             if (user == null)
-                return Unauthorized("Invalid credentials");
+            {
+                return Unauthorized(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Invalid credentials"
+                });
+            }
 
             var valid = await _userManager.CheckPasswordAsync(user, dto.Password);
+
             if (!valid)
-                return Unauthorized("Invalid credentials");
+            {
+                return Unauthorized(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Invalid credentials"
+                });
+            }
 
             // ✅ AUTO-ASSIGN ADMIN ROLE IF USER HAS NONE
             var roles = await _userManager.GetRolesAsync(user);
+
             if (!roles.Any())
             {
                 if (!await _roleManager.RoleExistsAsync("Admin"))
@@ -74,10 +102,10 @@ namespace HRMS.API.Controllers
                 await _userManager.AddToRoleAsync(user, "Admin");
             }
 
-            // 🔑 ACCESS TOKEN (JWT)
+            // 🔑 ACCESS TOKEN
             var token = await GenerateJwtToken(user);
 
-            // 🔁 REFRESH TOKEN (NEW)
+            // 🔁 REFRESH TOKEN
             var refreshToken = GenerateRefreshToken();
 
             _db.RefreshTokens.Add(new RefreshToken
@@ -91,14 +119,19 @@ namespace HRMS.API.Controllers
 
             await _db.SaveChangesAsync();
 
-            return Ok(new
+            return Ok(new ApiResponse<object>
             {
-                token,
-                refreshToken
+                Success = true,
+                Message = "Login successful",
+                Data = new
+                {
+                    token,
+                    refreshToken
+                }
             });
         }
 
-        // 🔄 REFRESH TOKEN API (NEW)
+        // 🔄 REFRESH TOKEN
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh(RefreshTokenRequestDto dto)
         {
@@ -109,19 +142,39 @@ namespace HRMS.API.Controllers
                     x.ExpiresAt > DateTime.UtcNow);
 
             if (storedToken == null)
-                return Unauthorized("Invalid refresh token");
+            {
+                return Unauthorized(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Invalid refresh token"
+                });
+            }
 
             var user = await _userManager.FindByIdAsync(storedToken.UserId);
-            if (user == null)
-                return Unauthorized();
 
+            if (user == null)
+            {
+                return Unauthorized(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User not found"
+                });
+            }
 
             var newAccessToken = await GenerateJwtToken(user);
 
-            return Ok(new { token = newAccessToken });
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Token refreshed successfully",
+                Data = new
+                {
+                    token = newAccessToken
+                }
+            });
         }
 
-        // 🚪 LOGOUT (OPTIONAL BUT CLEAN)
+        // 🚪 LOGOUT
         [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout(RefreshTokenRequestDto dto)
@@ -135,10 +188,14 @@ namespace HRMS.API.Controllers
                 await _db.SaveChangesAsync();
             }
 
-            return Ok("Logged out successfully");
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "Logged out successfully"
+            });
         }
 
-        // 🔐 JWT GENERATION (ONLY SMALL SAFETY ADDITION)
+        // 🔐 JWT GENERATION
         private async Task<string> GenerateJwtToken(ApplicationUser user)
         {
             var jwtSettings = _configuration.GetSection("JwtSettings");
@@ -149,7 +206,6 @@ namespace HRMS.API.Controllers
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-                
             };
 
             foreach (var role in roles)
@@ -176,11 +232,10 @@ namespace HRMS.API.Controllers
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        // 🔁 REFRESH TOKEN GENERATOR (NEW)
+        // 🔁 REFRESH TOKEN GENERATOR
         private string GenerateRefreshToken()
         {
             return Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
         }
     }
 }
-  

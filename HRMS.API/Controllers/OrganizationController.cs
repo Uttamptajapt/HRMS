@@ -1,102 +1,172 @@
-﻿using HRMS.Application.DTOs.Organization;
+﻿using HRMS.Application.Common.Responses;
+using HRMS.Application.DTOs.Organization;
 using HRMS.Domain.Entities;
 using HRMS.Infrastructure.Data;
-using HRMS.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
-namespace HRMS.API.Controllers
+[Route("api/[controller]")]
+[ApiController]
+public class OrganizationController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    [Authorize(Roles = "Admin")]    
-    public class OrganizationController : ControllerBase
+    private readonly ApplicationDbContext _context;
+
+    public OrganizationController(ApplicationDbContext context)
     {
-        private readonly UserManager<ApplicationUser> _userManager;
-        private readonly ApplicationDbContext _context;
+        _context = context;
+    }
 
-        public OrganizationController(
-            UserManager<ApplicationUser> userManager,
-            ApplicationDbContext context)
+    // ✅ CREATE ORGANIZATION
+    [HttpPost("create")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ApiResponse<Organization>), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> Create(CreateOrganizationDto dto)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(userId))
         {
-            _userManager = userManager;
-            _context = context;
-        }
-
-        // ✅ GET ALL
-        [HttpGet]
-        public async Task<IActionResult> GetAll()
-        {
-            var organizations = await _context.Organizations.ToListAsync();
-            return Ok(organizations);
-        }
-
-        // ✅ CREATE
-        [HttpPost("create")]
-        public async Task<IActionResult> Create(CreateOrganizationDto dto)
-        {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (userId == null)
-                return Unauthorized();
-
-            if (_context.Organizations.Any(o => o.CreatedByUserId == userId))
-                return BadRequest("You have already created an organization.");
-
-            var org = new Organization
-            {  
-                Id = Guid.NewGuid(),
-                Name = dto.Name,
-                Address = dto.Address,
-                CreatedByUserId = userId
-            };
-
-            _context.Organizations.Add(org);
-            await _context.SaveChangesAsync();
-
-            return Ok(new
+            return Unauthorized(new ApiResponse<string>
             {
-                message = "Organization created successfully",
-                id = org.Id,
-                data = org
+                Success = false,
+                Message = "User not authorized"
             });
         }
 
+        var alreadyExists = await _context.Organizations
+            .AnyAsync(o => o.CreatedByUserId == userId);
 
-        // ✅ UPDATE
-        [HttpPut("{id}")]
-        public async Task<IActionResult> Update(Guid id, UpdateOrganizationDto dto)
+        if (alreadyExists)
         {
-            var org = await _context.Organizations.FindAsync(id);
-            if (org == null)
-                return NotFound("Organization not found");
-
-            org.Name = dto.Name;
-            org.Address = dto.Address;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new
+            return BadRequest(new ApiResponse<string>
             {
-                message = "Organization updated successfully",
-                data = org
+                Success = false,
+                Message = "You have already created an organization."
             });
         }
 
-        // ✅ DELETE
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> Delete(Guid id)
+        var organization = new Organization
         {
-            var org = await _context.Organizations.FindAsync(id);
-            if (org == null)
-                return NotFound("Organization not found");
+            Id = Guid.NewGuid(),
+            Name = dto.Name,
+            Address = dto.Address,
+            CreatedByUserId = userId
+        };
 
-            _context.Organizations.Remove(org);
-            await _context.SaveChangesAsync();
+        _context.Organizations.Add(organization);
+        await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Organization deleted successfully" });
+        return CreatedAtAction(nameof(GetById), new { id = organization.Id },
+            new ApiResponse<Organization>
+            {
+                Success = true,
+                Message = "Organization created successfully",
+                Data = organization
+            });
+    }
+
+    // ✅ GET ALL ORGANIZATIONS
+    [HttpGet]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ApiResponse<IEnumerable<Organization>>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetAll()
+    {
+        var organizations = await _context.Organizations.ToListAsync();
+
+        return Ok(new ApiResponse<IEnumerable<Organization>>
+        {
+            Success = true,
+            Message = "Organizations fetched successfully",
+            Data = organizations
+        });
+    }
+
+    // ✅ GET ORGANIZATION BY ID
+    [HttpGet("{id}")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<Organization>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetById(Guid id)
+    {
+        var organization = await _context.Organizations.FindAsync(id);
+
+        if (organization == null)
+        {
+            return NotFound(new ApiResponse<string>
+            {
+                Success = false,
+                Message = "Organization not found"
+            });
         }
+
+        return Ok(new ApiResponse<Organization>
+        {
+            Success = true,
+            Message = "Organization fetched successfully",
+            Data = organization
+        });
+    }
+
+    // ✅ UPDATE ORGANIZATION
+    [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ApiResponse<Organization>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(Guid id, UpdateOrganizationDto dto)
+    {
+        var organization = await _context.Organizations.FindAsync(id);
+
+        if (organization == null)
+        {
+            return NotFound(new ApiResponse<string>
+            {
+                Success = false,
+                Message = "Organization not found"
+            });
+        }
+
+        organization.Name = dto.Name;
+        organization.Address = dto.Address;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<Organization>
+        {
+            Success = true,
+            Message = "Organization updated successfully",
+            Data = organization
+        });
+    }
+
+    // ✅ DELETE ORGANIZATION
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid id)
+    {
+        var organization = await _context.Organizations.FindAsync(id);
+
+        if (organization == null)
+        {
+            return NotFound(new ApiResponse<string>
+            {
+                Success = false,
+                Message = "Organization not found"
+            });
+        }
+
+        _context.Organizations.Remove(organization);
+        await _context.SaveChangesAsync();
+
+        return Ok(new ApiResponse<string>
+        {
+            Success = true,
+            Message = "Organization deleted successfully"
+        });
     }
 }

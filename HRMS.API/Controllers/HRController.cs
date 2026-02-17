@@ -1,5 +1,6 @@
 ﻿using HRMS.Application.DTOs.Auth;
 using HRMS.Application.DTOs.HR;
+using HRMS.Application.Common.Responses;
 using HRMS.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
@@ -39,7 +40,12 @@ namespace HRMS.API.Controllers
                 }
             }
 
-            return Ok(hrUsers);
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "HR users fetched successfully",
+                Data = hrUsers
+            });
         }
 
         // ✅ CREATE HR
@@ -47,8 +53,15 @@ namespace HRMS.API.Controllers
         public async Task<IActionResult> CreateHr(RegisterRequestDto dto)
         {
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
+
             if (existingUser != null)
-                return BadRequest("User already exists");
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User already exists"
+                });
+            }
 
             var hrUser = new ApplicationUser
             {
@@ -57,16 +70,28 @@ namespace HRMS.API.Controllers
             };
 
             var result = await _userManager.CreateAsync(hrUser, dto.Password);
+
             if (!result.Succeeded)
-                return BadRequest(result.Errors);
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "HR creation failed",
+                    Errors = result.Errors.Select(e => e.Description).ToList()
+                });
+            }
 
             await _userManager.AddToRoleAsync(hrUser, "HR");
 
-            return Ok(new
+            return Ok(new ApiResponse<object>
             {
-                message = "HR created successfully",
-                hrUser.Id,
-                hrUser.Email
+                Success = true,
+                Message = "HR created successfully",
+                Data = new
+                {
+                    hrUser.Id,
+                    hrUser.Email
+                }
             });
         }
 
@@ -75,20 +100,42 @@ namespace HRMS.API.Controllers
         public async Task<IActionResult> UpdateHR(string hrId, UpdateHrDto dto)
         {
             var hrUser = await _userManager.FindByIdAsync(hrId);
+
             if (hrUser == null)
-                return NotFound("HR user not found");
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "HR user not found"
+                });
+            }
 
             var isHR = await _userManager.IsInRoleAsync(hrUser, "HR");
+
             if (!isHR)
-                return BadRequest("User is not an HR");
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User is not an HR"
+                });
+            }
 
             // Update Email & Username
             hrUser.Email = dto.Email;
             hrUser.UserName = dto.Email;
 
             var updateResult = await _userManager.UpdateAsync(hrUser);
+
             if (!updateResult.Succeeded)
-                return BadRequest(updateResult.Errors);
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "HR update failed",
+                    Errors = updateResult.Errors.Select(e => e.Description).ToList()
+                });
+            }
 
             // Update Password (if provided)
             if (!string.IsNullOrEmpty(dto.NewPassword))
@@ -97,14 +144,25 @@ namespace HRMS.API.Controllers
                 var passwordResult = await _userManager.ResetPasswordAsync(hrUser, token, dto.NewPassword);
 
                 if (!passwordResult.Succeeded)
-                    return BadRequest(passwordResult.Errors);
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Password update failed",
+                        Errors = passwordResult.Errors.Select(e => e.Description).ToList()
+                    });
+                }
             }
 
-            return Ok(new
+            return Ok(new ApiResponse<object>
             {
-                message = "HR updated successfully",
-                hrUser.Id,
-                hrUser.Email
+                Success = true,
+                Message = "HR updated successfully",
+                Data = new
+                {
+                    hrUser.Id,
+                    hrUser.Email
+                }
             });
         }
 
@@ -113,18 +171,44 @@ namespace HRMS.API.Controllers
         public async Task<IActionResult> DeleteHR(string hrId)
         {
             var hrUser = await _userManager.FindByIdAsync(hrId);
+
             if (hrUser == null)
-                return NotFound("HR user not found");
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "HR user not found"
+                });
+            }
 
             var isHR = await _userManager.IsInRoleAsync(hrUser, "HR");
+
             if (!isHR)
-                return BadRequest("User is not an HR");
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User is not an HR"
+                });
+            }
 
             var result = await _userManager.DeleteAsync(hrUser);
-            if (!result.Succeeded)
-                return BadRequest(result.Errors);
 
-            return Ok("HR deleted successfully");
+            if (!result.Succeeded)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "HR deletion failed",
+                    Errors = result.Errors.Select(e => e.Description).ToList()
+                });
+            }
+
+            return Ok(new ApiResponse<object>
+            {
+                Success = true,
+                Message = "HR deleted successfully"
+            });
         }
     }
 }

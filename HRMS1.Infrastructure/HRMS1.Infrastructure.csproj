@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Data\Enitites\**" />
+    <EmbeddedResource Remove="Data\Enitites\**" />
+    <None Remove="Data\Enitites\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
@@ -19,10 +25,6 @@
   <ItemGroup>
     <ProjectReference Include="..\HRMS1.Application\HRMS1.Application.csproj" />
     <ProjectReference Include="..\HRMS1.Domain\HRMS1.Domain.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="Data\Enitites\" />
   </ItemGroup>
 
 </Project>
