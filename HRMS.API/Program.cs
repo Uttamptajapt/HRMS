@@ -3,11 +3,26 @@ using HRMS.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .WriteTo.File(
+    "Logs/hrms-log-.txt",
+    rollingInterval: RollingInterval.Day,
+    retainedFileCountLimit: 30,     // Keep only 30 days logs
+    fileSizeLimitBytes: 10_000_000, // 10 MB per file
+    rollOnFileSizeLimit: true)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 // ---------------- DATABASE ----------------
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
