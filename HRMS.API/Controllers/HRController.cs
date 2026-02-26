@@ -1,10 +1,11 @@
-﻿using HRMS.Application.DTOs.Auth;
+﻿using HRMS.Application.Common.Responses;
+using HRMS.Application.DTOs.Auth;
 using HRMS.Application.DTOs.HR;
-using HRMS.Application.Common.Responses;
 using HRMS.Infrastructure.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace HRMS.API.Controllers
 {
@@ -21,10 +22,29 @@ namespace HRMS.API.Controllers
         }
 
         // ✅ GET ALL HR USERS
+        // ✅ GET ALL HR USERS
         [HttpGet("all")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllHR()
         {
-            var users = _userManager.Users.ToList();
+            var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            var adminUser = await _userManager.FindByIdAsync(adminUserId);
+
+            if (adminUser == null)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Admin not found"
+                });
+            }
+
+            // 🔐 Only users from same organization
+            var users = _userManager.Users
+                .Where(u => u.OrganizationId == adminUser.OrganizationId)
+                .ToList();
+
             var hrUsers = new List<object>();
 
             foreach (var user in users)
@@ -47,9 +67,9 @@ namespace HRMS.API.Controllers
                 Data = hrUsers
             });
         }
-
         // ✅ CREATE HR
         [HttpPost("create")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> CreateHr(RegisterRequestDto dto)
         {
             var existingUser = await _userManager.FindByEmailAsync(dto.Email);
@@ -63,10 +83,24 @@ namespace HRMS.API.Controllers
                 });
             }
 
+            // 🔐 Get logged-in Admin
+            var adminUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var adminUser = await _userManager.FindByIdAsync(adminUserId);
+
+            if (adminUser == null)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Admin not found"
+                });
+            }
+
             var hrUser = new ApplicationUser
             {
                 UserName = dto.Email,
-                Email = dto.Email
+                Email = dto.Email,
+                OrganizationId = adminUser.OrganizationId // 🔥 VERY IMPORTANT
             };
 
             var result = await _userManager.CreateAsync(hrUser, dto.Password);
@@ -96,7 +130,7 @@ namespace HRMS.API.Controllers
         }
 
         // ✅ UPDATE HR
-        [HttpPut("update/{Id}")]
+        [HttpPut("{hrId}")]
         public async Task<IActionResult> UpdateHR(string hrId, UpdateHrDto dto)
         {
             var hrUser = await _userManager.FindByIdAsync(hrId);
@@ -121,7 +155,7 @@ namespace HRMS.API.Controllers
                 });
             }
 
-            // Update Email & Username
+            // ✅ Update Email & Username
             hrUser.Email = dto.Email;
             hrUser.UserName = dto.Email;
 
@@ -137,7 +171,7 @@ namespace HRMS.API.Controllers
                 });
             }
 
-            // Update Password (if provided)
+            // ✅ Update Password (if provided)
             if (!string.IsNullOrEmpty(dto.NewPassword))
             {
                 var token = await _userManager.GeneratePasswordResetTokenAsync(hrUser);
@@ -165,9 +199,8 @@ namespace HRMS.API.Controllers
                 }
             });
         }
-
         // ✅ DELETE HR
-        [HttpDelete("delete/{hId}")]
+        [HttpDelete("{hrId}")]
         public async Task<IActionResult> DeleteHR(string hrId)
         {
             var hrUser = await _userManager.FindByIdAsync(hrId);

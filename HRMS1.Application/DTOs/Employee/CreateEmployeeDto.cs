@@ -23,7 +23,7 @@ public class CreateEmployeeDto
     [MinLength(5, ErrorMessage = "Address must be at least 5 characters")]
     public string Address { get; set; }
 
-    // 🔹 Required for DB persistence
-    [Required(ErrorMessage = "OrganizationId is required")]
-    public Guid OrganizationId { get; set; }
+    //// 🔹 Required for DB persistence
+    //[Required(ErrorMessage = "OrganizationId is required")]
+    //public Guid OrganizationId { get; set; }
 }

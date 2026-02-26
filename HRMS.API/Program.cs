@@ -8,6 +8,11 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using Serilog;
+using HRMS1.Application.Interfaces.Repositories;
+using HRMS1.Infrastructure.Repositories;
+
+var builder1 = WebApplication.CreateBuilder(args);
+builder1.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -118,7 +123,7 @@ app.MapControllers();
 app.Run();
 
 
-// ---------------- ROLE SEED METHOD ----------------
+// ---------------- ROLE SEED METHOD ---------------------
 static async Task SeedRolesAsync(IServiceProvider serviceProvider)
 {
     var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();

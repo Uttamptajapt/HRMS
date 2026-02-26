@@ -1,11 +1,13 @@
-﻿using HRMS.Domain.Entities;
+﻿using HRMS.Application.Common.Responses;
+ //using HRMS.Application.DTOs.Employee; // Make sure your DTOs are included
+using HRMS.Domain.Entities;
 using HRMS.Infrastructure.Data;
 using HRMS.Infrastructure.Identity;
-using HRMS.Application.Common.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;   // ✅ Added
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
@@ -18,44 +20,65 @@ namespace HRMS.API.Controllers
     {
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly ILogger<EmployeeController> _logger;  // ✅ Added
+        private readonly ILogger<EmployeeController> _logger;
 
         public EmployeeController(
             ApplicationDbContext context,
             UserManager<ApplicationUser> userManager,
-            ILogger<EmployeeController> logger)   // ✅ Added
+            ILogger<EmployeeController> logger)
         {
             _context = context;
             _userManager = userManager;
-            _logger = logger;   // ✅ Added
+            _logger = logger;
         }
 
         // ✅ GET Employees
         [HttpGet("all")]
-        public IActionResult GetAll()
+        [Authorize(Roles = "Admin,HR")]
+        public async Task<IActionResult> GetAll()
         {
             _logger.LogInformation("GetAll Employees API called.");
 
             var userId = User.Claims
-                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
+                .First(c => c.Type == ClaimTypes.NameIdentifier ||
+                            c.Type == JwtRegisteredClaimNames.Sub)
                 .Value;
 
-            var roles = User.Claims
-                .Where(c => c.Type == ClaimTypes.Role)
-                .Select(r => r.Value)
-                .ToList();
+            // Get logged-in user from database
+            var user = await _userManager.FindByIdAsync(userId);
 
-            var result = roles.Contains("Admin")
-                ? _context.Employees.ToList()
-                : _context.Employees.Where(e => e.CreatedByUserId == userId).ToList();
+            if (user == null)
+            {
+                _logger.LogWarning("User not found for Id: {UserId}", userId);
+                return Unauthorized(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "User not found."
+                });
+            }
 
-            _logger.LogInformation("Employees fetched successfully by UserId: {UserId}", userId);
+            // Use user's OrganizationId to fetch employees (secure SaaS)
+            if (user.OrganizationId == null)
+            {
+                _logger.LogWarning("Organization not found for UserId: {UserId}", userId);
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Organization not found for this user."
+                });
+            }
+
+            var employees = await _context.Employees
+                .Where(e => e.OrganizationId == user.OrganizationId) // ✅ Fixed multi-tenant
+                .ToListAsync();
+
+            _logger.LogInformation("Employees fetched successfully for UserId: {UserId}", userId);
 
             return Ok(new ApiResponse<object>
             {
                 Success = true,
                 Message = "Employees fetched successfully",
-                Data = result
+                Data = employees
             });
         }
 
@@ -67,23 +90,33 @@ namespace HRMS.API.Controllers
             _logger.LogInformation("Create Employee API called for Email: {Email}", dto.Email);
 
             var hrUserId = User.Claims
-                .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
+                .First(c => c.Type == ClaimTypes.NameIdentifier ||
+                            c.Type == JwtRegisteredClaimNames.Sub)
                 .Value;
 
-            var organizationExists = _context.Organizations
-                .Any(o => o.Id == dto.OrganizationId);
+            var hrUser = await _userManager.FindByIdAsync(hrUserId);
 
-            if (!organizationExists)
+            if (hrUser == null)
             {
-                _logger.LogWarning("Invalid OrganizationId {OrgId} provided by HR {UserId}", dto.OrganizationId, hrUserId);
-
-                return BadRequest(new ApiResponse<object>
+                _logger.LogWarning("HR user not found for Id: {UserId}", hrUserId);
+                return Unauthorized(new ApiResponse<object>
                 {
                     Success = false,
-                    Message = "Invalid OrganizationId. Organization does not exist."
+                    Message = "HR user not found."
                 });
             }
 
+            if (hrUser.OrganizationId == null)
+            {
+                _logger.LogWarning("Organization not found for HR {UserId}", hrUserId);
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Organization not found for this HR user."
+                });
+            }
+
+            // ✅ Multi-tenant safe: always use HR's OrganizationId
             var employee = new Employee
             {
                 Id = Guid.NewGuid(),
@@ -92,21 +125,44 @@ namespace HRMS.API.Controllers
                 Email = dto.Email,
                 PhoneNumber = dto.PhoneNumber,
                 Address = dto.Address,
-                OrganizationId = dto.OrganizationId,
+                OrganizationId = hrUser.OrganizationId, // ✅ Fixed
                 CreatedByUserId = hrUserId
             };
 
-            _context.Employees.Add(employee);
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation("Employee created successfully with Id: {EmployeeId}", employee.Id);
-
-            return Ok(new ApiResponse<object>
+            try
             {
-                Success = true,
-                Message = "Employee created successfully",
-                Data = employee
-            });
+                _context.Employees.Add(employee);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Employee created successfully with Id: {EmployeeId}", employee.Id);
+
+                return Ok(new ApiResponse<object>
+                {
+                    Success = true,
+                    Message = "Employee created successfully",
+                    Data = employee
+                });
+            }
+            catch (DbUpdateException)
+            {
+                _logger.LogWarning("Duplicate email attempt for Email: {Email}", dto.Email);
+
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "Employee with this email already exists."
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error occurred while creating employee.");
+
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An unexpected error occurred."
+                });
+            }
         }
 
         // ✅ UPDATE Employee
@@ -120,8 +176,8 @@ namespace HRMS.API.Controllers
                 .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
                 .Value;
 
-            var employee = _context.Employees
-                .FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
+            var employee = await _context.Employees
+                .FirstOrDefaultAsync(e => e.Id == id && e.CreatedByUserId == userId);
 
             if (employee == null)
             {
@@ -162,8 +218,8 @@ namespace HRMS.API.Controllers
                 .First(c => c.Type == ClaimTypes.NameIdentifier || c.Type == JwtRegisteredClaimNames.Sub)
                 .Value;
 
-            var employee = _context.Employees
-                .FirstOrDefault(e => e.Id == id && e.CreatedByUserId == userId);
+            var employee = await _context.Employees
+                .FirstOrDefaultAsync(e => e.Id == id && e.CreatedByUserId == userId);
 
             if (employee == null)
             {
