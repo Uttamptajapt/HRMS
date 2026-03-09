@@ -13,6 +13,8 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
+//This is a AuthController of HRMS Project ---
+
 namespace HRMS.API.Controllers
 {
     [ApiController]
