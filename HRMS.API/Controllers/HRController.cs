@@ -69,7 +69,7 @@ namespace HRMS.API.Controllers
                 Data = hrUsers
             });
         }
-        // ✅ CREATE HR
+        // Create HR form this following api
         [HttpPost("create")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> CreateHr(RegisterRequestDto dto)
