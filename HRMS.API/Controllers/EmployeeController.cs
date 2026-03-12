@@ -209,7 +209,7 @@ namespace HRMS.API.Controllers
             });
         }
 
-        // ✅ DELETE Employee
+        // ✅ DELETE Employee using a (delete/{id})
         [HttpDelete("delete/{id}")]
         [Authorize(Roles = "HR")]
         public async Task<IActionResult> Delete(Guid id)
