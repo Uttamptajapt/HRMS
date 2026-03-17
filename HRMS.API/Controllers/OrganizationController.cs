@@ -24,7 +24,7 @@ public class OrganizationController : ControllerBase
         _userManager = userManager;
     }
 
-
+    // Create Organization using this [HttpPost("Create")] API ---
     // ✅ CREATE ORGANIZATION
     [HttpPost("create")]
     [Authorize(Roles = "Admin")]
