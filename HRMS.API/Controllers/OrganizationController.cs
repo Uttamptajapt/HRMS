@@ -153,7 +153,7 @@ public class OrganizationController : ControllerBase
         });
     }
 
-    // ✅ UPDATE ORGANIZATION
+   // UPDATE Organization Using this API
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ApiResponse<Organization>), StatusCodes.Status200OK)]
