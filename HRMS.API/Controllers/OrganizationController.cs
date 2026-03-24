@@ -184,7 +184,7 @@ public class OrganizationController : ControllerBase
         });
     }
 
-    // DELETE Organization usinfg this API 
+    // DELETE Organization using this API 
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ApiResponse<string>), StatusCodes.Status200OK)]
