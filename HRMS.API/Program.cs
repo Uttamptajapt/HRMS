@@ -11,6 +11,8 @@ using Serilog;
 using HRMS1.Application.Interfaces.Repositories;
 using HRMS1.Infrastructure.Repositories;
 
+
+// This is a Program.cs File All Important Data store here..
 var builder1 = WebApplication.CreateBuilder(args);
 builder1.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
