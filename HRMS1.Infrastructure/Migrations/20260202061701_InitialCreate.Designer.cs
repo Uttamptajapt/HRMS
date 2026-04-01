@@ -205,7 +205,7 @@ namespace HRMS1.Infrastructure.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
                 {
-                    b.Property<string>("UserId")
+                    b.Property<string>("UserId")     // This is for UserId
                         .HasColumnType("text");
 
                     b.Property<string>("LoginProvider")
