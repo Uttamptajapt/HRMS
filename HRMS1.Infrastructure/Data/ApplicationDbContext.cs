@@ -17,7 +17,7 @@ namespace HRMS.Infrastructure.Data
         public DbSet<Employee> Employees { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         
-        // ✅ This method through user can override the Employee Email
+        
         // ✅ ADD THIS METHOD
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
