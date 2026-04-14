@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Linq.Expressions;
 
 
-// This is a GenericRepository for the project repom code 
+
 namespace HRMS1.Infrastructure.Repositories
 {
     public class GenericRepository<T> : IGenericRepository<T> where T : class
